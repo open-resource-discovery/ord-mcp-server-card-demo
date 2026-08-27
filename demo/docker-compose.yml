@@ -1,0 +1,103 @@
+services:
+  thruster:
+    build:
+      context: ..
+      dockerfile: spaceship-app/Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      - PORT=3000
+      - SERVER_TYPE=thruster
+      - SERVER_URL=http://thruster.local:3000
+    networks:
+      default:
+        aliases:
+          - thruster.local
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      retries: 5
+
+  navigation:
+    build:
+      context: ..
+      dockerfile: spaceship-app/Dockerfile
+    ports:
+      - "3002:3000"
+    environment:
+      - PORT=3000
+      - SERVER_TYPE=navigation
+      - SERVER_URL=http://navigation.local:3000
+    networks:
+      default:
+        aliases:
+          - navigation.local
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      retries: 5
+
+  life-support:
+    build:
+      context: ..
+      dockerfile: spaceship-app/Dockerfile
+    ports:
+      - "3003:3000"
+    environment:
+      - PORT=3000
+      - SERVER_TYPE=life-support
+      - SERVER_URL=http://life-support.local:3000
+    networks:
+      default:
+        aliases:
+          - life-support.local
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      retries: 5
+
+  comms:
+    build:
+      context: ..
+      dockerfile: spaceship-app/Dockerfile
+    ports:
+      - "3004:3000"
+    environment:
+      - PORT=3000
+      - SERVER_TYPE=comms
+      - SERVER_URL=http://comms.local:3000
+    networks:
+      default:
+        aliases:
+          - comms.local
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      retries: 5
+
+  catalog-agent:
+    build:
+      context: ..
+      dockerfile: super-agent/Dockerfile
+    ports:
+      - "3005:3000"
+    environment:
+      - PORT=3000
+      - SERVER_URL=http://localhost:3005
+      - SPACESHIP_URLS=http://thruster.local:3000,http://navigation.local:3000,http://life-support.local:3000,http://comms.local:3000
+      - PUBLIC_SPACESHIP_URLS=http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}
+      - ANTHROPIC_BASE_URL=http://host.docker.internal:6655/anthropic
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      retries: 5
+    depends_on:
+      thruster:
+        condition: service_healthy
+      navigation:
+        condition: service_healthy
+      life-support:
+        condition: service_healthy
+      comms:
+        condition: service_healthy

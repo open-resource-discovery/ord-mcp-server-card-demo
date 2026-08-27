@@ -1,0 +1,103 @@
+### MCP Server Card Demo — HTTP Requests
+### Requires: REST Client extension for VS Code
+### Start demo: demo/demo.sh
+
+@thruster    = http://localhost:3001
+@navigation  = http://localhost:3002
+@lifeSupport = http://localhost:3003
+@comms       = http://localhost:3004
+@catalog     = http://localhost:3005
+
+# ─── 1. Server Cards (static — no MCP session needed) ────────────────────────
+
+### Thruster Control — Server Card
+GET {{thruster}}/.well-known/mcp-server-card.json
+
+###
+
+### Navigation — Server Card
+GET {{navigation}}/.well-known/mcp-server-card.json
+
+###
+
+### Life Support — Server Card
+GET {{lifeSupport}}/.well-known/mcp-server-card.json
+
+###
+
+### Comms Relay — Server Card
+GET {{comms}}/.well-known/mcp-server-card.json
+
+# ─── 2. ORD Catalog (paste URL into playground sidebar) ──────────────────────
+
+### ORD well-known config
+GET {{catalog}}/.well-known/open-resource-discovery
+
+###
+
+### ORD document — all 4 MCP servers listed
+GET {{catalog}}/ord/v1/documents/catalog
+
+###
+
+### Catalog summary
+GET {{catalog}}/api/catalog
+
+# ─── 3. Poor Agent — Before Server Card discovery ────────────────────────────
+### Agent has no tools. Watch it fail.
+
+### Poor agent — no discovery
+POST {{catalog}}/api/chat
+Content-Type: application/json
+
+{
+  "message": "The thruster is overheating! We need to reduce thrust immediately.",
+  "withDiscovery": false
+}
+
+# ─── 4. Poor Agent — After Server Card discovery ─────────────────────────────
+### Agent reads Server Cards → discovers tools → connects to right MCP server
+### → calls check_thruster_status then adjust_thrust_level
+
+### Poor agent — with Server Card discovery
+POST {{catalog}}/api/chat
+Content-Type: application/json
+
+{
+  "message": "The thruster is overheating! We need to reduce thrust immediately.",
+  "withDiscovery": true
+}
+
+###
+
+### Life Support scenario
+POST {{catalog}}/api/chat
+Content-Type: application/json
+
+{
+  "message": "CO2 levels are dangerously high in the cabin!",
+  "withDiscovery": true
+}
+
+###
+
+### Navigation scenario
+POST {{catalog}}/api/chat
+Content-Type: application/json
+
+{
+  "message": "How far are we from our destination and when do we arrive?",
+  "withDiscovery": true
+}
+
+# ─── 5. Playground ───────────────────────────────────────────────────────────
+### Paste the ORD URL into the playground to show all 4 servers in the sidebar:
+###   https://open-resource-discovery.github.io/mcp-server-card-ui/playground/
+###
+### ORD URL: http://localhost:3005/.well-known/open-resource-discovery
+###
+### Or add individual servers by their Server Card URL:
+###   http://localhost:3001/.well-known/mcp-server-card.json
+###   http://localhost:3002/.well-known/mcp-server-card.json
+###   http://localhost:3003/.well-known/mcp-server-card.json
+###   http://localhost:3004/.well-known/mcp-server-card.json
