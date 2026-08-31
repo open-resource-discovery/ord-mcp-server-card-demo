@@ -71,7 +71,10 @@ export const UI_HTML = `<!DOCTYPE html>
       align-items: center;
       gap: 8px;
       border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      scrollbar-width: none;
     }
+    .scenarios::-webkit-scrollbar { display: none; }
     .scenarios-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
     .scenario-btn {
       background: var(--surface);
@@ -187,13 +190,10 @@ export const UI_HTML = `<!DOCTYPE html>
       border: 1px solid var(--border);
       line-height: 1.65;
     }
-    .step.no-tools .step-text {
+    .step.answer.no-tools .step-text {
       color: var(--muted);
       background: rgba(248,81,73,0.05);
-      padding: 12px 14px;
-      border-radius: 6px;
       border: 1px solid rgba(248,81,73,0.2);
-      line-height: 1.65;
       font-style: italic;
     }
     .step.ord .step-meta { color: var(--purple); }
@@ -278,20 +278,23 @@ export const UI_HTML = `<!DOCTYPE html>
   <span class="scenarios-label">Scenarios:</span>
   <button class="scenario-btn active" data-msg="The thruster is overheating! We need to reduce thrust immediately.">&#128293; Thruster overheating</button>
   <button class="scenario-btn" data-msg="CO2 levels are dangerously high in the cabin!">&#9763;&#65039; CO2 critical</button>
-  <button class="scenario-btn" data-msg="How far are we from our destination and when do we arrive?">&#128640; ETA to destination</button>
-  <button class="scenario-btn" data-msg="We have lost contact with Earth. Scan for any signals.">&#128225; Lost contact</button>
+  <button class="scenario-btn" data-msg="Prepare the ship for immediate departure to Mars. Plot the course and make sure the thrusters are ready.">&#128640; Depart to Mars</button>
+  <button class="scenario-btn" data-msg="We have lost contact with Earth and the thrusters are losing power. Handle both emergencies now.">&#128225; Contact lost + thrusters failing</button>
+  <button class="scenario-btn" data-msg="Check if the crew is safe — are life support systems stable and can we still communicate with anyone?">&#129489;&#8205;&#128640; Crew safety check</button>
+  <button class="scenario-btn" data-msg="Are we on track and is the ship in good shape to continue the mission? Check our position, life support, and thruster status.">&#128506; Mission readiness</button>
+  <button class="scenario-btn" data-msg="We have a critical situation across multiple systems. Run a full system check: thrusters, life support, navigation, and communications.">&#128680; Full system check</button>
 </div>
 
 <div class="panels">
   <div class="panel">
     <div class="panel-header">
-      <h2>Agent without discovery</h2>
-      <span class="badge badge-red">No tools</span>
+      <h2>Server Card without tool metadata</h2>
+      <span class="badge badge-red" id="badge-without">No tool metadata</span>
     </div>
     <div class="panel-body" id="panel-without">
       <div class="empty-state">
         <div class="icon">&#129335;</div>
-        <p>Agent has no tools.<br>It can only guess.</p>
+        <p>Finds the servers,<br>but can't see their tools.</p>
       </div>
     </div>
     <div class="panel-footer">
@@ -303,13 +306,13 @@ export const UI_HTML = `<!DOCTYPE html>
   </div>
   <div class="panel">
     <div class="panel-header">
-      <h2>Agent with Server Card discovery</h2>
-      <span class="badge badge-green" id="badge-with">Tools discovered</span>
+      <h2>Server Card with tool metadata</h2>
+      <span class="badge badge-green" id="badge-with">Tool metadata</span>
     </div>
     <div class="panel-body" id="panel-with">
       <div class="empty-state">
         <div class="icon">&#128269;</div>
-        <p>Agent reads Server Cards,<br>discovers tools, takes action.</p>
+        <p>Reads tool metadata,<br>discovers capabilities, acts.</p>
       </div>
     </div>
     <div class="panel-footer">
@@ -329,6 +332,7 @@ export const UI_HTML = `<!DOCTYPE html>
   var sendWithBtn    = document.getElementById('send-with-btn');
   var panelWithout   = document.getElementById('panel-without');
   var panelWith      = document.getElementById('panel-with');
+  var badgeWithout   = document.getElementById('badge-without');
   var badgeWith      = document.getElementById('badge-with');
 
   inputWithout.value = scenarios[0].dataset.msg;
@@ -374,9 +378,10 @@ export const UI_HTML = `<!DOCTYPE html>
     });
   }
 
-  function buildStep(step) {
+  function buildStep(step, isNoTools) {
     var div = document.createElement('div');
     div.className = 'step ' + step.type;
+    if (isNoTools && step.type === 'answer') div.className += ' no-tools';
     var server = step.server ? '<span style="color:var(--purple)">' + esc(step.server) + '</span> &middot; ' : '';
     var textHtml;
     if (step.type === 'ord' && step.url) {
@@ -419,26 +424,19 @@ export const UI_HTML = `<!DOCTYPE html>
         panel.appendChild(errDiv);
         return;
       }
-      if (!withDiscovery) {
-        var noToolsDiv = document.createElement('div');
-        noToolsDiv.className = 'step no-tools';
-        noToolsDiv.innerHTML =
-          '<div class="step-icon">❌</div>' +
-          '<div class="step-content">' +
-            '<div class="step-meta" style="color:var(--red)">No tools available</div>' +
-            '<div class="step-text">' + esc(data.answer) + '</div>' +
-          '</div>';
-        panel.appendChild(noToolsDiv);
-        return;
+      if (data.serverCount !== undefined && data.toolCount !== undefined) {
+        if (withDiscovery) {
+          badgeWith.textContent = data.toolCount + ' tools \xb7 ' + data.serverCount + ' servers';
+        } else {
+          badgeWithout.textContent = data.serverCount + ' servers \xb7 0 tools';
+        }
       }
-      if (data.toolCount !== undefined && data.serverCount !== undefined) {
-        badgeWith.textContent = data.toolCount + ' tools \xb7 ' + data.serverCount + ' servers';
-      }
+      var isNoTools = !withDiscovery;
       for (var i = 0; i < data.steps.length; i++) {
         if (i > 0) await delay(180);
         var step = data.steps[i];
         if (step.type === 'tool_call' && step.server) flashPill(step.server);
-        panel.appendChild(buildStep(step));
+        panel.appendChild(buildStep(step, isNoTools));
         panel.scrollTop = panel.scrollHeight;
       }
     } catch(err) {
@@ -459,7 +457,7 @@ export const UI_HTML = `<!DOCTYPE html>
     var message = inputWithout.value.trim();
     if (!message) return;
     setBtnsDisabled(true);
-    sendWithoutBtn.textContent = 'Thinking...';
+    sendWithoutBtn.textContent = 'Discovering...';
     await runAgent(message, false, panelWithout);
     setBtnsDisabled(false);
     sendWithoutBtn.textContent = 'Send query →';
@@ -476,9 +474,10 @@ export const UI_HTML = `<!DOCTYPE html>
   });
 
   document.getElementById('reset-btn').addEventListener('click', function() {
-    resetPanel(panelWithout, '\u{1F937}', 'Agent has no tools.', 'It can only guess.');
-    resetPanel(panelWith,    '\u{1F50D}', 'Agent reads Server Cards,', 'discovers tools, takes action.');
-    badgeWith.textContent = 'Tools discovered';
+    resetPanel(panelWithout, '\u{1F937}', 'Finds the servers,', 'but can’t see their tools.');
+    resetPanel(panelWith,    '\u{1F50D}', 'Reads tool metadata,', 'discovers capabilities, acts.');
+    badgeWithout.textContent = 'No tool metadata';
+    badgeWith.textContent    = 'Tool metadata';
     setBtnsDisabled(false);
     sendWithoutBtn.textContent = 'Send query →';
     sendWithBtn.textContent    = 'Send query →';

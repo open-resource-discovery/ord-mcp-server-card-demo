@@ -22,17 +22,7 @@ export async function runPoorAgent(
     ...(config.anthropicBaseUrl ? { baseURL: config.anthropicBaseUrl } : {}),
   });
 
-  if (!withDiscovery) {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 512,
-      messages: [{ role: "user", content: userMessage }],
-    });
-    const answer = response.content.find((b) => b.type === "text")?.text ?? "";
-    return { answer, steps };
-  }
-
-  // Step 1: Read ORD document
+  // Step 1: Read ORD document (both modes)
   steps.push({
     type: "ord",
     content: `Reading ORD document at ${config.serverUrl}/ord/v1/documents/catalog`,
@@ -56,10 +46,9 @@ export async function runPoorAgent(
     content: `Found ${serverCardUrls.length} MCP servers in ORD. Fetching Server Cards...`,
   });
 
-  // Step 2: Fetch Server Cards
+  // Step 2: Fetch Server Cards (both modes)
   const serverCardResults = await Promise.all(
-    serverCardUrls.map(async (cardUrl) => {
-      const baseUrl = cardUrl.replace("/.well-known/mcp-server-card.json", "");
+    config.spaceshipUrls.map(async (baseUrl) => {
       const card = await fetchServerCard(baseUrl);
       return card ? { baseUrl, card } : null;
     }),
@@ -68,37 +57,86 @@ export async function runPoorAgent(
     (r): r is { baseUrl: string; card: ServerCard } => r !== null,
   );
 
-  // Step 3: Build tool catalog from Server Cards
+  // Step 3: Build tool catalog — different strategy per mode
   const toolRoutes = new Map<string, { mcpUrl: string; serverTitle: string }>();
   const claudeTools: Anthropic.Messages.Tool[] = [];
 
-  for (const { card } of serverCards) {
-    const mcpUrl = card.remotes[0]?.url;
-    if (!mcpUrl) continue;
-    for (const tool of card.tools ?? []) {
-      toolRoutes.set(tool.name, { mcpUrl, serverTitle: card.title ?? card.name });
-      claudeTools.push({
-        name: tool.name,
-        description: tool.description,
-        input_schema: {
-          type: "object" as const,
-          properties: (tool.inputSchema?.properties as Record<string, Anthropic.Messages.Tool["input_schema"]>) ?? {},
-          required: tool.inputSchema?.required ?? [],
-        },
+  if (!withDiscovery) {
+    // No tool metadata in cards — must connect to every server to discover tools
+    steps.push({
+      type: "thinking",
+      content: `Server Cards have no tool metadata. Must connect to all ${serverCards.length} servers and call tools/list to discover capabilities...`,
+    });
+
+    for (const { card } of serverCards) {
+      const mcpUrl = card.remotes[0]?.url;
+      if (!mcpUrl) continue;
+      const serverTitle = card.title ?? card.name;
+
+      steps.push({
+        type: "tool_call",
+        content: `Calling tools/list on ${mcpUrl}`,
+        server: serverTitle,
       });
+
+      const mcpClient = new Client({ name: "catalog-agent", version: "1.0.0" }, { capabilities: {} });
+      const transport = new StreamableHTTPClientTransport(new URL(mcpUrl));
+      await mcpClient.connect(transport);
+      const { tools } = await mcpClient.listTools();
+      await mcpClient.close();
+
+      steps.push({
+        type: "tool_result",
+        content: `Found ${tools.length} tools: ${tools.map((t) => t.name).join(", ")}`,
+        server: serverTitle,
+      });
+
+      for (const tool of tools) {
+        toolRoutes.set(tool.name, { mcpUrl, serverTitle });
+        claudeTools.push({
+          name: tool.name,
+          description: tool.description ?? "",
+          input_schema: {
+            type: "object" as const,
+            properties: (tool.inputSchema.properties as Record<string, Anthropic.Messages.Tool["input_schema"]>) ?? {},
+            required: (tool.inputSchema as { required?: string[] }).required ?? [],
+          },
+        });
+      }
+    }
+  } else {
+    // Tool metadata in cards — read directly, no live connections needed
+    for (const { card } of serverCards) {
+      const mcpUrl = card.remotes[0]?.url;
+      if (!mcpUrl) continue;
+      const serverTitle = card.title ?? card.name;
+      for (const tool of card.tools ?? []) {
+        toolRoutes.set(tool.name, { mcpUrl, serverTitle });
+        claudeTools.push({
+          name: tool.name,
+          description: tool.description,
+          input_schema: {
+            type: "object" as const,
+            properties: (tool.inputSchema?.properties as Record<string, Anthropic.Messages.Tool["input_schema"]>) ?? {},
+            required: tool.inputSchema?.required ?? [],
+          },
+        });
+      }
     }
   }
 
   steps.push({
     type: "thinking",
-    content: `Loaded ${claudeTools.length} tools from ${serverCards.length} Server Cards. Asking Claude to respond...`,
+    content: withDiscovery
+      ? `Loaded ${claudeTools.length} tools from ${serverCards.length} Server Cards. Asking Claude to respond...`
+      : `Discovered ${claudeTools.length} tools across ${serverCards.length} servers via live connections. Asking Claude to respond...`,
   });
 
   const messages: Anthropic.Messages.MessageParam[] = [
     { role: "user", content: userMessage },
   ];
 
-  // Agentic loop
+  // Agentic loop — identical for both modes
   while (true) {
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
