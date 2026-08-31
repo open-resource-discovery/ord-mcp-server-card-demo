@@ -4,6 +4,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { fetchServerCard, type ServerCard } from "./catalog.js";
 import { config } from "./config.js";
 
+export type Stage = 1 | 2 | 3 | 4;
+
 export interface AgentStep {
   type: "thinking" | "tool_call" | "tool_result" | "answer" | "ord";
   content: string;
@@ -12,60 +14,110 @@ export interface AgentStep {
   url?: string;
 }
 
-export async function runPoorAgent(
+export async function runAgent(
   userMessage: string,
-  withDiscovery: boolean,
-): Promise<{ answer: string; steps: AgentStep[]; toolCount?: number; serverCount?: number }> {
+  stage: Stage,
+): Promise<{ answer: string; steps: AgentStep[]; toolCount: number; serverCount: number }> {
   const steps: AgentStep[] = [];
   const client = new Anthropic({
     ...(config.anthropicAuthToken ? { authToken: config.anthropicAuthToken } : {}),
     ...(config.anthropicBaseUrl ? { baseURL: config.anthropicBaseUrl } : {}),
   });
 
-  // Step 1: Read ORD document (both modes)
-  steps.push({
-    type: "ord",
-    content: `Reading ORD document at ${config.serverUrl}/ord/v1/documents/catalog`,
-    url: `${config.serverUrl}/ord/v1/documents/catalog`,
-  });
+  // ─── STAGE 1: No MCP — plain LLM ─────────────────────────────────────────
+  if (stage === 1) {
+    steps.push({ type: "thinking", content: "No MCP tools. Sending message to Claude directly." });
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1024,
+      tools: [],
+      messages: [{ role: "user", content: userMessage }],
+    });
+    const answer = response.content.find((b) => b.type === "text")?.text ?? "";
+    steps.push({ type: "answer", content: answer });
+    return { answer, steps, toolCount: 0, serverCount: 0 };
+  }
 
-  const ordRes = await fetch(config.ordDocUrl);
-  const ordDoc = await ordRes.json() as {
-    apiResources?: Array<{
-      resourceDefinitions?: Array<{ type: string; url: string }>;
-    }>;
-  };
-
-  const serverCardUrls = (ordDoc.apiResources ?? [])
-    .flatMap((api) => api.resourceDefinitions ?? [])
-    .filter((def) => def.type === "mcp-server-card" && def.url)
-    .map((def) => def.url);
-
-  steps.push({
-    type: "thinking",
-    content: `Found ${serverCardUrls.length} MCP servers in ORD. Fetching Server Cards...`,
-  });
-
-  // Step 2: Fetch Server Cards (both modes)
-  const serverCardResults = await Promise.all(
-    config.spaceshipUrls.map(async (baseUrl) => {
-      const card = await fetchServerCard(baseUrl);
-      return card ? { baseUrl, card } : null;
-    }),
-  );
-  const serverCards = serverCardResults.filter(
-    (r): r is { baseUrl: string; card: ServerCard } => r !== null,
-  );
-
-  // Step 3: Build tool catalog — different strategy per mode
+  // ─── STAGES 2–4: MCP enabled ──────────────────────────────────────────────
   const toolRoutes = new Map<string, { mcpUrl: string; serverTitle: string }>();
   const claudeTools: Anthropic.Messages.Tool[] = [];
 
-  if (!withDiscovery) {
-    // No tool metadata in cards — must connect to every server to discover tools
+  // Step 1: Discover servers
+  let serverCards: { baseUrl: string; card: ServerCard }[] = [];
+
+  if (stage === 2) {
+    // Config-based: server URLs come from env config, not ORD
     steps.push({
       type: "thinking",
-      content: `Server Cards have no tool metadata. Must connect to all ${serverCards.length} servers and call tools/list to discover capabilities...`,
+      content: `Using ${config.spaceshipUrls.length} server URLs from configuration. No ORD document.`,
+    });
+    const results = await Promise.all(
+      config.spaceshipUrls.map(async (baseUrl) => {
+        const card = await fetchServerCard(baseUrl);
+        return card ? { baseUrl, card } : null;
+      }),
+    );
+    serverCards = results.filter((r): r is { baseUrl: string; card: ServerCard } => r !== null);
+  } else {
+    // Stages 3 + 4: ORD document reveals server list
+    steps.push({
+      type: "ord",
+      content: `Reading ORD document at ${config.serverUrl}/ord/v1/documents/catalog`,
+      url: `${config.serverUrl}/ord/v1/documents/catalog`,
+    });
+
+    const ordRes = await fetch(config.ordDocUrl);
+    const ordDoc = await ordRes.json() as {
+      apiResources?: Array<{ resourceDefinitions?: Array<{ type: string; url: string }> }>;
+    };
+    const serverCardUrls = (ordDoc.apiResources ?? [])
+      .flatMap((api) => api.resourceDefinitions ?? [])
+      .filter((def) => def.type === "mcp-server-card" && def.url)
+      .map((def) => def.url);
+
+    steps.push({
+      type: "thinking",
+      content: `Found ${serverCardUrls.length} MCP servers in ORD. Fetching Server Cards...`,
+    });
+
+    const results = await Promise.all(
+      config.spaceshipUrls.map(async (baseUrl) => {
+        const card = await fetchServerCard(baseUrl);
+        return card ? { baseUrl, card } : null;
+      }),
+    );
+    serverCards = results.filter((r): r is { baseUrl: string; card: ServerCard } => r !== null);
+  }
+
+  // Step 2: Build tool catalog
+  if (stage === 4) {
+    // ─── STAGE 4: Tool metadata from Server Card — no live connections needed ─
+    for (const { card } of serverCards) {
+      const mcpUrl = card.remotes[0]?.url;
+      if (!mcpUrl) continue;
+      const serverTitle = card.title ?? card.name;
+      for (const tool of card.tools ?? []) {
+        toolRoutes.set(tool.name, { mcpUrl, serverTitle });
+        claudeTools.push({
+          name: tool.name,
+          description: tool.description,
+          input_schema: {
+            type: "object" as const,
+            properties: (tool.inputSchema?.properties as Record<string, Anthropic.Messages.Tool["input_schema"]>) ?? {},
+            required: tool.inputSchema?.required ?? [],
+          },
+        });
+      }
+    }
+    steps.push({
+      type: "thinking",
+      content: `Loaded ${claudeTools.length} tools from ${serverCards.length} Server Cards. No live connections needed.`,
+    });
+  } else {
+    // ─── STAGES 2 + 3: Must connect to each server and call tools/list ────────
+    steps.push({
+      type: "thinking",
+      content: `No tool metadata in cards. Connecting to all ${serverCards.length} servers to discover tools...`,
     });
 
     for (const { card } of serverCards) {
@@ -73,11 +125,7 @@ export async function runPoorAgent(
       if (!mcpUrl) continue;
       const serverTitle = card.title ?? card.name;
 
-      steps.push({
-        type: "tool_call",
-        content: `Calling tools/list on ${mcpUrl}`,
-        server: serverTitle,
-      });
+      steps.push({ type: "tool_call", content: `Calling tools/list on ${mcpUrl}`, server: serverTitle });
 
       const mcpClient = new Client({ name: "catalog-agent", version: "1.0.0" }, { capabilities: {} });
       const transport = new StreamableHTTPClientTransport(new URL(mcpUrl));
@@ -104,39 +152,16 @@ export async function runPoorAgent(
         });
       }
     }
-  } else {
-    // Tool metadata in cards — read directly, no live connections needed
-    for (const { card } of serverCards) {
-      const mcpUrl = card.remotes[0]?.url;
-      if (!mcpUrl) continue;
-      const serverTitle = card.title ?? card.name;
-      for (const tool of card.tools ?? []) {
-        toolRoutes.set(tool.name, { mcpUrl, serverTitle });
-        claudeTools.push({
-          name: tool.name,
-          description: tool.description,
-          input_schema: {
-            type: "object" as const,
-            properties: (tool.inputSchema?.properties as Record<string, Anthropic.Messages.Tool["input_schema"]>) ?? {},
-            required: tool.inputSchema?.required ?? [],
-          },
-        });
-      }
-    }
+
+    steps.push({
+      type: "thinking",
+      content: `Discovered ${claudeTools.length} tools across ${serverCards.length} servers via live connections. Asking Claude...`,
+    });
   }
 
-  steps.push({
-    type: "thinking",
-    content: withDiscovery
-      ? `Loaded ${claudeTools.length} tools from ${serverCards.length} Server Cards. Asking Claude to respond...`
-      : `Discovered ${claudeTools.length} tools across ${serverCards.length} servers via live connections. Asking Claude to respond...`,
-  });
+  const messages: Anthropic.Messages.MessageParam[] = [{ role: "user", content: userMessage }];
 
-  const messages: Anthropic.Messages.MessageParam[] = [
-    { role: "user", content: userMessage },
-  ];
-
-  // Agentic loop — identical for both modes
+  // ─── Agentic loop — identical for stages 2, 3, 4 ─────────────────────────
   while (true) {
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
@@ -180,13 +205,7 @@ export async function runPoorAgent(
         const resultContent = result.content as Array<{ type: string; text?: string }>;
         const resultText = resultContent.find((c) => c.type === "text")?.text ?? JSON.stringify(result.content);
 
-        steps.push({
-          type: "tool_result",
-          content: resultText,
-          tool: block.name,
-          server: route.serverTitle,
-        });
-
+        steps.push({ type: "tool_result", content: resultText, tool: block.name, server: route.serverTitle });
         toolResults.push({ type: "tool_result", tool_use_id: block.id, content: resultText });
       }
 

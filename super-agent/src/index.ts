@@ -1,7 +1,7 @@
 import express from "express";
 import { config } from "./config.js";
 import { fetchAllServerCards } from "./catalog.js";
-import { runPoorAgent } from "./agent.js";
+import { runAgent, type Stage } from "./agent.js";
 import { createOrdRouter } from "./ordRouter.js";
 import { UI_HTML } from "./ui.js";
 
@@ -38,11 +38,8 @@ app.get("/api/catalog", async (_req, res) => {
   });
 });
 
-// Poor agent — the demo centrepiece
-// withDiscovery=false: agent has no tools → shows the problem
-// withDiscovery=true: agent reads Server Cards, discovers tools, connects → shows the solution
 app.post("/api/chat", async (req, res) => {
-  const { message, withDiscovery = false } = req.body as { message: string; withDiscovery?: boolean };
+  const { message, stage = 3 } = req.body as { message: string; stage?: Stage };
 
   if (!message) {
     res.status(400).json({ error: "message is required" });
@@ -50,11 +47,11 @@ app.post("/api/chat", async (req, res) => {
   }
 
   try {
-    const result = await runPoorAgent(message, withDiscovery);
+    const result = await runAgent(message, stage as Stage);
     res.json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: message });
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: msg });
   }
 });
 

@@ -2,18 +2,25 @@
 
 A live demonstration of [MCP Server Cards](https://github.com/modelcontextprotocol/ext-server-card) combined with [Open Resource Discovery (ORD)](https://open-resource-discovery.org) for agent-driven tool discovery — built for MCPCon Amsterdam 2026.
 
-The demo shows the same AI agent solving spaceship emergencies in two modes side-by-side: one where the Server Card carries static tool metadata (right panel), and one where it does not (left panel). The contrast shows the real cost of blind discovery.
+The demo walks through four progressive stages of MCP server discovery, showing an AI agent solving spaceship emergencies at each stage. The progression makes visible exactly what ORD and Server Card tool metadata buy you — and what the cost is without them.
 
 ---
 
 ## What it demonstrates
 
-| | Left panel — no tool metadata | Right panel — with tool metadata |
-| --- | --- | --- |
-| **Server Card** | `/.well-known/mcp-server-card.json` — server identity, remote URL, no tools | Same card, plus full `tools[]` array |
-| **Discovery** | Must connect to every server and call `tools/list` to learn what it can do | Reads tools directly from the card — zero live connections |
-| **Agent cost** | 4 extra MCP round-trips before the first Claude call | Immediate — catalog built from static metadata |
-| **End result** | Same actions taken, same answer | Same actions taken, same answer |
+Four stages, each selectable from the UI:
+
+| Stage | Server source | Tool source | What it shows |
+| --- | --- | --- | --- |
+| **1 — No MCP** | — | None | Claude can only reason, not act. No tools, no MCP. |
+| **2 — Config + tools/list** | Env config (manual) | `tools/list` at runtime | How MCP is used today. Works, but someone wrote that URL list by hand. |
+| **3 — ORD + tools/list** | ORD document (servers self-describe) | `tools/list` at runtime | Ownership of the server list shifts to the provider. Still needs live connections for tools. |
+| **4 — ORD + Server Card** | ORD document | `tools[]` in the card | Tool catalog built from static metadata. Zero connections before the first tool call. |
+
+The key transitions:
+
+- **Stage 2 → 3**: who maintains the server list shifts from a consumer config file to provider self-description via ORD
+- **Stage 3 → 4**: who maintains the tool catalog shifts from runtime `tools/list` to static `tools[]` in the Server Card
 
 The point: tool metadata in the Server Card lets an agent, registry, or orchestrator know what a server does **before connecting** — the same way OpenAPI lets you understand an API before calling it.
 
@@ -49,7 +56,7 @@ graph TD
 
 ## Discovery flow
 
-### Left panel — no tool metadata
+### Stage 3 — ORD + tools/list
 
 ```mermaid
 sequenceDiagram
@@ -77,7 +84,7 @@ sequenceDiagram
     Claude-->>Agent: end_turn → answer
 ```
 
-### Right panel — with tool metadata
+### Stage 4 — ORD + Server Card tool metadata
 
 ```mermaid
 sequenceDiagram
