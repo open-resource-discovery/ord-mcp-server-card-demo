@@ -186,7 +186,7 @@ The UI includes seven pre-built scenarios that exercise different subsets of the
 | Mission readiness | Navigation + Life Support + Thruster Control |
 | Full system check | All four servers |
 
-Multi-server scenarios are where the discovery overhead difference is most visible: the left panel must make 4 sequential `tools/list` calls before Claude sees a single tool, while the right panel starts immediately.
+Multi-server scenarios are where the discovery overhead difference is most visible: Stage 3 makes 4 sequential `tools/list` calls before Claude sees a single tool, while Stage 4 starts immediately from the card.
 
 ---
 
@@ -200,7 +200,7 @@ ord-mcp-server-card-demo/
 │       └── shared/         # createServer.ts — ORD + Server Card + MCP endpoint
 ├── super-agent/            # Catalog agent: UI, ORD router, agent logic
 │   └── src/
-│       ├── agent.ts        # Two-mode discovery + agentic loop
+│       ├── agent.ts        # 4-stage discovery + agentic loop
 │       ├── catalog.ts      # ServerCard fetch + type
 │       ├── config.ts       # Env config (ports, URLs, API key)
 │       ├── ordRouter.ts    # ORD well-known + catalog document endpoints
