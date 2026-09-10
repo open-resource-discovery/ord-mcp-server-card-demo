@@ -36,8 +36,6 @@ docker compose up
 
 Open **[http://localhost:3005](http://localhost:3005)** in your browser.
 
-> **SAP employees:** Set `ANTHROPIC_AUTH_TOKEN` (HAI proxy token) instead of `ANTHROPIC_API_KEY`, and ensure the HAI proxy is running locally on port 6655.
-
 ### Rebuild after code changes
 
 ```bash
