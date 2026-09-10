@@ -1,0 +1,105 @@
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import { createSpaceshipServer, type ServerCardConfig } from "../shared/createServer.js";
+
+const card: ServerCardConfig = {
+  name: "spaceship.demo/oxygen-scrubber",
+  title: "Backup Oxygen Scrubber",
+  version: "1.0.0",
+  description: "Secondary CO2 scrubbing system and emergency oxygen reserves — independent of primary life support",
+  tools: [
+    {
+      name: "get_scrubber_status",
+      title: "Get Scrubber Status",
+      description: "Check backup CO2 scrubbing capacity, filter saturation, and reserve oxygen levels",
+      annotations: { readOnlyHint: true },
+      inputSchema: {},
+    },
+    {
+      name: "activate_backup_scrubbers",
+      title: "Activate Backup Scrubbers",
+      description: "Bring secondary CO2 scrubbing units online to supplement or replace primary system",
+      annotations: { idempotentHint: true },
+      inputSchema: {},
+    },
+    {
+      name: "tap_oxygen_reserve",
+      title: "Tap Oxygen Reserve",
+      description: "Release oxygen from emergency reserve tanks into the cabin",
+      inputSchema: {
+        properties: {
+          liters: {
+            type: "number",
+            description: "Volume of O2 to release in liters (max 500 per cycle)",
+            minimum: 10,
+            maximum: 500,
+          },
+        },
+        required: ["liters"],
+      },
+    },
+  ],
+};
+
+function registerTools(server: McpServer) {
+  server.tool(
+    "get_scrubber_status",
+    "Check backup CO2 scrubbing capacity, filter saturation, and reserve oxygen levels",
+    {},
+    async () => ({
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          backup_scrubbers_active: false,
+          scrubber_units_available: 3,
+          filter_saturation_percent: 12,
+          co2_processing_capacity_ppm_per_min: 800,
+          oxygen_reserve_liters: 2200,
+          reserve_status: "full",
+          status: "standby",
+          message: "Backup scrubbers on standby. Reserves full. Ready to activate on command.",
+        }, null, 2),
+      }],
+    }),
+  );
+
+  server.tool(
+    "activate_backup_scrubbers",
+    "Bring secondary CO2 scrubbing units online to supplement or replace primary system",
+    {},
+    async () => ({
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          status: "active",
+          units_online: 3,
+          combined_capacity_ppm_per_min: 800,
+          estimated_co2_normalisation_minutes: 14,
+          message: "All 3 backup scrubber units online. Combined with primary, CO2 should reach safe levels in ~14 minutes.",
+        }, null, 2),
+      }],
+    }),
+  );
+
+  server.tool(
+    "tap_oxygen_reserve",
+    "Release oxygen from emergency reserve tanks into the cabin",
+    { liters: z.number().min(10).max(500) },
+    async ({ liters }) => ({
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          status: "releasing",
+          liters_released: liters,
+          reserve_remaining_liters: 2200 - liters,
+          cabin_o2_boost_percent: +(liters / 200).toFixed(2),
+          message: `${liters}L O2 released from emergency reserves. Reserve at ${2200 - liters}L remaining.`,
+        }, null, 2),
+      }],
+    }),
+  );
+}
+
+export function createOxygenScrubberServer(serverUrl: string) {
+  return createSpaceshipServer(serverUrl, card, registerTools);
+}

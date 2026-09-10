@@ -75,6 +75,63 @@ services:
       interval: 5s
       retries: 5
 
+  damage-control:
+    build:
+      context: ..
+      dockerfile: spaceship-app/Dockerfile
+    ports:
+      - "3006:3000"
+    environment:
+      - PORT=3000
+      - SERVER_TYPE=damage-control
+      - SERVER_URL=http://damage-control.local:3000
+    networks:
+      default:
+        aliases:
+          - damage-control.local
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      retries: 5
+
+  oxygen-scrubber:
+    build:
+      context: ..
+      dockerfile: spaceship-app/Dockerfile
+    ports:
+      - "3007:3000"
+    environment:
+      - PORT=3000
+      - SERVER_TYPE=oxygen-scrubber
+      - SERVER_URL=http://oxygen-scrubber.local:3000
+    networks:
+      default:
+        aliases:
+          - oxygen-scrubber.local
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      retries: 5
+
+  entertainment:
+    build:
+      context: ..
+      dockerfile: spaceship-app/Dockerfile
+    ports:
+      - "3008:3000"
+    environment:
+      - PORT=3000
+      - SERVER_TYPE=entertainment
+      - SERVER_URL=http://entertainment.local:3000
+    networks:
+      default:
+        aliases:
+          - entertainment.local
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      retries: 5
+
   catalog-agent:
     build:
       context: ..
@@ -86,8 +143,14 @@ services:
       - SERVER_URL=http://localhost:3005
       - SPACESHIP_URLS=http://thruster.local:3000,http://navigation.local:3000,http://life-support.local:3000,http://comms.local:3000
       - PUBLIC_SPACESHIP_URLS=http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004
+      - ORD_SPACESHIP_URLS=http://thruster.local:3000,http://navigation.local:3000,http://life-support.local:3000,http://comms.local:3000,http://damage-control.local:3000,http://oxygen-scrubber.local:3000,http://entertainment.local:3000
+      - PUBLIC_ORD_SPACESHIP_URLS=http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3006,http://localhost:3007,http://localhost:3008
+      - MCP_SERVERS_FILE=/app/mcp-servers.json
       - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}
       - ANTHROPIC_BASE_URL=http://host.docker.internal:6655/anthropic
+    volumes:
+      # Hand-written Stage 2 config — editable on the host during the talk.
+      - ./mcp-servers.json:/app/mcp-servers.json
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 5s
@@ -100,4 +163,10 @@ services:
       life-support:
         condition: service_healthy
       comms:
+        condition: service_healthy
+      damage-control:
+        condition: service_healthy
+      oxygen-scrubber:
+        condition: service_healthy
+      entertainment:
         condition: service_healthy

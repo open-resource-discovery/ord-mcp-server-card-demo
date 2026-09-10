@@ -1,7 +1,17 @@
 import { Router } from "express";
+import { fetchServerCard, type ServerCard } from "./catalog.js";
 
 export function createOrdRouter(baseUrl: string, spaceshipUrls: string[], publicSpaceshipUrls: string[]): Router {
   const router = Router();
+
+  // Last-known Server Card per server. Refreshed best-effort on each catalog
+  // read; a server that goes offline keeps its cached card, so the ORD document
+  // still describes it (and its tools) without a live connection.
+  const cardCache = new Map<string, ServerCard>();
+
+  function slugFromUrl(url: string): string {
+    try { return new URL(url).hostname.replace(".local", ""); } catch { return url; }
+  }
 
   router.get("/.well-known/open-resource-discovery", (_req, res) => {
     res.json({
@@ -17,16 +27,29 @@ export function createOrdRouter(baseUrl: string, spaceshipUrls: string[], public
     });
   });
 
-  router.get("/ord/v1/documents/catalog", (_req, res) => {
-    const serverNames = ["thruster-control", "navigation", "life-support", "comms-relay"];
-    const serverTitles = ["Thruster Control", "Navigation", "Life Support", "Comms Relay"];
+  router.get("/ord/v1/documents/catalog", async (_req, res) => {
+    // Best-effort crawl: update the cache for any server currently reachable.
+    // Offline servers are skipped and keep whatever card was last cached.
+    await Promise.all(
+      spaceshipUrls.map(async (internalUrl) => {
+        const card = await fetchServerCard(internalUrl);
+        if (card) cardCache.set(internalUrl, card);
+      }),
+    );
 
     const apiResources = spaceshipUrls.map((internalUrl, i) => {
       const publicUrl = publicSpaceshipUrls[i] ?? internalUrl;
+      const cachedCard = cardCache.get(internalUrl);
+
+      const serverSlug = cachedCard?.name?.includes("/")
+        ? cachedCard.name.split("/").pop()!
+        : slugFromUrl(internalUrl);
+      const serverTitle = cachedCard?.title ?? serverSlug;
+
       return {
-        ordId: `spaceship.demo:apiResource:${serverNames[i]}:v1`,
-        title: serverTitles[i],
-        shortDescription: `MCP server for ${serverTitles[i]}`,
+        ordId: `spaceship.demo:apiResource:${serverSlug}:v1`,
+        title: serverTitle,
+        shortDescription: `MCP server for ${serverTitle}`,
         version: "1.0.0",
         visibility: "public",
         releaseStatus: "active",
@@ -40,8 +63,11 @@ export function createOrdRouter(baseUrl: string, spaceshipUrls: string[], public
           {
             type: "mcp-server-card",
             mediaType: "application/json",
-            url: `${publicUrl}/.well-known/mcp-server-card.json`,
+            url: `${publicUrl}/.well-known/mcp/server-card`,
             accessStrategies: [{ type: "open" }],
+            // Server Card embedded inline: consumers get the full card (identity,
+            // remotes, tools) from this one document without fetching each server.
+            ...(cachedCard ? { card: cachedCard } : {}),
           },
         ],
         lastUpdate: "2026-08-26T00:00:00Z",

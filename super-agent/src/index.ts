@@ -1,12 +1,14 @@
 import express from "express";
 import { config } from "./config.js";
 import { fetchAllServerCards } from "./catalog.js";
-import { runAgent, type Stage } from "./agent.js";
+import { runAgent, type Stage, type ConversationTurn } from "./agent.js";
 import { createOrdRouter } from "./ordRouter.js";
 import { UI_HTML } from "./ui.js";
 
 const app = express();
 app.use(express.json());
+app.use("/assets", express.static("public/assets"));
+app.use("/assets", express.static("src/assets"));
 
 app.use((_req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -16,8 +18,8 @@ app.use((_req, res, next) => {
   next();
 });
 
-// ORD endpoints — playground discovers all 4 spaceship servers from here
-app.use(createOrdRouter(config.serverUrl, config.spaceshipUrls, config.publicSpaceshipUrls));
+// ORD endpoints — playground discovers all 6 spaceship servers from here
+app.use(createOrdRouter(config.serverUrl, config.ordSpaceshipUrls, config.publicOrdSpaceshipUrls));
 
 // Demo UI — served inline from compiled source
 app.get("/", (_req, res) => res.setHeader("Content-Type", "text/html").send(UI_HTML));
@@ -39,7 +41,7 @@ app.get("/api/catalog", async (_req, res) => {
 });
 
 app.post("/api/chat", async (req, res) => {
-  const { message, stage = 3 } = req.body as { message: string; stage?: Stage };
+  const { message, stage = 3, history = [] } = req.body as { message: string; stage?: Stage; history?: ConversationTurn[] };
 
   if (!message) {
     res.status(400).json({ error: "message is required" });
@@ -47,7 +49,7 @@ app.post("/api/chat", async (req, res) => {
   }
 
   try {
-    const result = await runAgent(message, stage as Stage);
+    const result = await runAgent(message, stage as Stage, history);
     res.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
