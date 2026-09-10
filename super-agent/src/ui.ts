@@ -265,8 +265,11 @@ export const UI_HTML = `<!DOCTYPE html>
       background: rgba(188,140,255,0.06); padding: 5px 8px;
       border-radius: 4px; border-left: 2px solid var(--purple);
     }
-    .step.ord .step-text a { color: var(--purple); text-decoration: underline; opacity: 0.85; }
-    .step.ord .step-text a:hover { opacity: 1; }
+    .step.ord .step-text a {
+      color: var(--purple); text-decoration: underline;
+      display: block; margin-top: 4px; word-break: break-all; font-weight: 600;
+    }
+    .step.ord .step-text a:hover { opacity: 0.85; }
 
     /* ── Chat working indicator ── */
     .chat-working {
@@ -379,10 +382,9 @@ export const UI_HTML = `<!DOCTYPE html>
 </div>
 
 <div class="scenarios">
-  <span class="scenarios-label">Scenario:</span>
-  <button class="scenario-btn" data-msg="We've taken a hit. Life support is draining and comms are down. Assess the damage and tell us how to get home.">&#128680; Assess the damage</button>
-  <button class="scenario-btn" data-msg="CO2 levels are dangerously high in the cabin!">&#9763;&#65039; CO2 critical</button>
-  <button class="scenario-btn" data-msg="We have lost contact with Earth and the thrusters are losing power. Handle both emergencies now.">&#128225; Contact lost + thrusters failing</button>
+  <button class="scenario-btn" data-msg="Give me a full status report of all ship systems.">&#128202; Status report</button>
+  <button class="scenario-btn" data-msg="We've taken a hit. Assess the damage and fix what you can.">&#128680; Assess &amp; fix</button>
+  <button class="scenario-btn" data-msg="How do we get back to Earth from our current position?">&#127758; Get us home</button>
 </div>
 
 <div class="main-grid">
@@ -444,7 +446,7 @@ export const UI_HTML = `<!DOCTYPE html>
       flow: [
         { label: 'config', cls: 's2' }, '>',
         { label: 'Agent', cls: 'on' }, '>',
-        { label: 'tools/list ×4', cls: 's2' }, '>',
+        { label: 'tools/list', cls: 's2' }, '>',
         { label: 'MCP servers', cls: 'on' }, '>',
         { label: 'Claude', cls: 'on' }
       ],
@@ -457,7 +459,7 @@ export const UI_HTML = `<!DOCTYPE html>
       flow: [
         { label: 'ORD', cls: 's3' }, '>',
         { label: 'Agent', cls: 'on' }, '>',
-        { label: 'tools/list ×7', cls: 's3' }, '>',
+        { label: 'tools/list', cls: 's3' }, '>',
         { label: 'MCP servers', cls: 'on' }, '>',
         { label: 'Claude', cls: 'on' }
       ],
@@ -573,6 +575,9 @@ export const UI_HTML = `<!DOCTYPE html>
   function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
+  function softScroll(el) {
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
+  }
   function loading() {
     var d = document.createElement('div');
     d.className = 'loading';
@@ -601,8 +606,8 @@ export const UI_HTML = `<!DOCTYPE html>
     var server = step.server ? '<span style="color:var(--purple)">' + esc(step.server) + '</span> · ' : '';
     var textHtml;
     if (step.type === 'ord' && step.url) {
-      var eu = esc(step.url);
-      textHtml = esc(step.content).replace(eu, '<a href="' + step.url + '" target="_blank">' + eu + '</a>');
+      var label = esc(step.content).replace(esc(step.url), '').replace(/\s+$/, '');
+      textHtml = label + '<a href="' + step.url + '" target="_blank">' + esc(step.url) + '</a>';
     } else if (step.type === 'answer') {
       textHtml = marked.parse(step.content);
     } else {
@@ -669,7 +674,7 @@ export const UI_HTML = `<!DOCTYPE html>
 
     var loader = loading();
     activityBody.appendChild(loader);
-    activityBody.scrollTop = activityBody.scrollHeight;
+    softScroll(activityBody);
 
     try {
       var res = await fetch('/api/chat', {
@@ -698,7 +703,7 @@ export const UI_HTML = `<!DOCTYPE html>
         if (step.type === 'tool_call' && step.server) flashPill(step.server);
         var target = ACTIVITY_TYPES[step.type] ? activityBody : panelBody;
         target.appendChild(buildStep(step, isBlind));
-        target.scrollTop = target.scrollHeight;
+        softScroll(target);
       }
       var si = document.getElementById('stage-img');
       if (si && currentStage === 1) si.src = '/assets/stage1.png';

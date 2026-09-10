@@ -22,6 +22,10 @@ const SYSTEM_NO_TOOLS =
 const SYSTEM_WITH_TOOLS =
   `${MITHRA_PERSONA} You are connected to the ship's systems through the tools provided. Use them to read real telemetry and to act — do not guess values you can measure, and do not claim to change anything you can do via a tool. Take the actions the situation calls for, then report what you did and what you found. If the situation calls for something you have no tool for, do not name or speculate about missing systems — instead, express that you cannot guarantee the situation is fully resolved and that your current access may be incomplete.`;
 
+// Stage 2 adds awareness that the server list is hand-written and may not cover all ship systems.
+const SYSTEM_STAGE2 =
+  `${SYSTEM_WITH_TOOLS} Important: your connection to ship systems comes from a manually maintained configuration file. It may not list every system on board. After responding, always note that your assessment is limited to the systems in your current configuration and that there may be other ship systems you have no visibility into.`;
+
 
 export interface AgentStep {
   type: "thinking" | "tool_call" | "tool_result" | "answer" | "ord";
@@ -62,25 +66,42 @@ export async function runAgent(
 
   // ─── STAGES 2–4: MCP enabled ──────────────────────────────────────────────
   const toolRoutes = new Map<string, { mcpUrl: string; serverTitle: string }>();
-  const claudeTools: Anthropic.Messages.Tool[] = [];
+  let claudeTools: Anthropic.Messages.Tool[] = [];
 
   // Step 1: Discover servers
   let serverCards: { baseUrl: string; card: ServerCard }[] = [];
+  let failedUrls: string[] = [];
 
   if (stage === 2) {
     // Config-based: server URLs come from a hand-written file, not ORD
     const stage2Urls = loadStage2ServerUrls();
     steps.push({
       type: "thinking",
-      content: `Reading hand-written config (mcp-servers.json): ${stage2Urls.length} server URLs. No ORD document.`,
+      content: `Reading hand-written config (mcp-servers.json): ${stage2Urls.length} server URLs.`,
     });
-    const results = await Promise.all(
-      stage2Urls.map(async (baseUrl) => {
-        const card = await fetchServerCard(baseUrl);
-        return card ? { baseUrl, card } : null;
-      }),
+    const failedResults = await Promise.all(
+      stage2Urls.map(async (baseUrl) => ({
+        baseUrl,
+        card: await fetchServerCard(baseUrl),
+      })),
     );
-    serverCards = results.filter((r): r is { baseUrl: string; card: ServerCard } => r !== null);
+    for (const r of failedResults) {
+      if (r.card) {
+        serverCards.push({ baseUrl: r.baseUrl, card: r.card });
+      } else {
+        failedUrls.push(r.baseUrl);
+        steps.push({
+          type: "thinking",
+          content: `⚠ Could not reach ${r.baseUrl} — server may be down or the URL in the config is stale.`,
+        });
+      }
+    }
+    if (failedUrls.length > 0) {
+      steps.push({
+        type: "thinking",
+        content: `Proceeding with ${serverCards.length} reachable server(s). ${failedUrls.length} server(s) skipped.`,
+      });
+    }
   } else {
     // Stages 3 + 4: ORD document reveals the server list AND carries each
     // Server Card inline — one read gets the whole fleet, no per-server fetch.
@@ -144,7 +165,7 @@ export async function runAgent(
       if (!mcpUrl) continue;
       const serverTitle = card.title ?? card.name;
 
-      steps.push({ type: "tool_call", content: `Calling tools/list on ${mcpUrl}`, server: serverTitle });
+      steps.push({ type: "tool_call", content: `tools/list`, server: serverTitle });
 
       const mcpClient = new Client({ name: "catalog-agent", version: "1.0.0" }, { capabilities: {} });
       const transport = new StreamableHTTPClientTransport(new URL(mcpUrl));
@@ -178,9 +199,56 @@ export async function runAgent(
     });
   }
 
+  // ─── STAGE 4: Pre-select relevant tools using Server Card descriptions ───────
+  if (stage === 4 && claudeTools.length > 0) {
+    const toolSummary = claudeTools.map((t) => `${t.name}: ${t.description}`).join('\n');
+
+    steps.push({
+      type: "thinking",
+      content: `Pre-selecting relevant tools from ${claudeTools.length} available using Server Card descriptions...`,
+    });
+
+    const selectionRes = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 256,
+      system: "You are a tool selector. Given a user message and a list of tools with descriptions, return ONLY a JSON array of the tool names needed. No explanation, no markdown — just the JSON array.",
+      messages: [{
+        role: "user",
+        content: `User message: "${userMessage}"\n\nAvailable tools:\n${toolSummary}`,
+      }],
+    });
+
+    const selectionText = selectionRes.content.find((b) => b.type === "text")?.text ?? "[]";
+    let selectedNames: string[] = [];
+    try {
+      const match = selectionText.match(/\[[\s\S]*\]/);
+      selectedNames = match ? (JSON.parse(match[0]) as string[]) : [];
+    } catch {
+      selectedNames = [];
+    }
+
+    if (selectedNames.length > 0) {
+      const totalBefore = claudeTools.length;
+      claudeTools = claudeTools.filter((t) => selectedNames.includes(t.name));
+      steps.push({
+        type: "thinking",
+        content: `Selected ${claudeTools.length} of ${totalBefore} tools: ${claudeTools.map((t) => t.name).join(', ')}`,
+      });
+    } else {
+      steps.push({
+        type: "thinking",
+        content: `Pre-selection inconclusive — proceeding with all ${claudeTools.length} tools.`,
+      });
+    }
+  }
+
+  const failedNote = failedUrls.length > 0
+    ? `\n\n[System note: The following configured servers were unreachable and could not be assessed: ${failedUrls.join(', ')}. Mention this clearly in your response.]`
+    : '';
+
   const messages: Anthropic.Messages.MessageParam[] = [
     ...history.map((h) => ({ role: h.role as "user" | "assistant", content: h.content })),
-    { role: "user", content: userMessage },
+    { role: "user", content: userMessage + failedNote },
   ];
 
   // ─── Agentic loop — identical for stages 2, 3, 4 ─────────────────────────
@@ -188,7 +256,7 @@ export async function runAgent(
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
-      system: SYSTEM_WITH_TOOLS,
+      system: stage === 2 ? SYSTEM_STAGE2 : SYSTEM_WITH_TOOLS,
       tools: claudeTools,
       messages,
     });
@@ -214,7 +282,7 @@ export async function runAgent(
 
         steps.push({
           type: "tool_call",
-          content: `Calling ${block.name} with args: ${JSON.stringify(block.input)}`,
+          content: block.name,
           tool: block.name,
           server: route.serverTitle,
         });
@@ -228,7 +296,7 @@ export async function runAgent(
         const resultContent = result.content as Array<{ type: string; text?: string }>;
         const resultText = resultContent.find((c) => c.type === "text")?.text ?? JSON.stringify(result.content);
 
-        steps.push({ type: "tool_result", content: resultText, tool: block.name, server: route.serverTitle });
+        steps.push({ type: "tool_result", content: resultText.slice(0, 120) + (resultText.length > 120 ? '…' : ''), tool: block.name, server: route.serverTitle });
         toolResults.push({ type: "tool_result", tool_use_id: block.id, content: resultText });
       }
 
