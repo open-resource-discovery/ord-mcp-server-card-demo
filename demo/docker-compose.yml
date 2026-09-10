@@ -65,11 +65,11 @@ services:
     environment:
       - PORT=3000
       - SERVER_TYPE=comms
-      - SERVER_URL=http://comms.local:3000
+      - SERVER_URL=http://communication.local:3000
     networks:
       default:
         aliases:
-          - comms.local
+          - communication.local
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 5s
@@ -141,9 +141,9 @@ services:
     environment:
       - PORT=3000
       - SERVER_URL=http://localhost:3005
-      - SPACESHIP_URLS=http://thruster.local:3000,http://navigation.local:3000,http://life-support.local:3000,http://comms.local:3000
+      - SPACESHIP_URLS=http://thruster.local:3000,http://navigation.local:3000,http://life-support.local:3000,http://communication.local:3000
       - PUBLIC_SPACESHIP_URLS=http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004
-      - ORD_SPACESHIP_URLS=http://thruster.local:3000,http://navigation.local:3000,http://life-support.local:3000,http://comms.local:3000,http://damage-control.local:3000,http://oxygen-scrubber.local:3000,http://entertainment.local:3000
+      - ORD_SPACESHIP_URLS=http://thruster.local:3000,http://navigation.local:3000,http://life-support.local:3000,http://communication.local:3000,http://damage-control.local:3000,http://oxygen-scrubber.local:3000,http://entertainment.local:3000
       - PUBLIC_ORD_SPACESHIP_URLS=http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3006,http://localhost:3007,http://localhost:3008
       - MCP_SERVERS_FILE=/app/mcp-servers.json
       - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}
