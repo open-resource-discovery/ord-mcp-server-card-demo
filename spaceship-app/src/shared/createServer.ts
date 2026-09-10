@@ -42,7 +42,7 @@ export function createSpaceshipServer(
   });
 
   const serverCard = {
-    $schema: "https://static.modelcontextprotocol.io/schemas/mcp-server-card/v1.json",
+    $schema: "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
     name: card.name,
     title: card.title,
     version: card.version,
@@ -63,7 +63,7 @@ export function createSpaceshipServer(
     })),
   };
 
-  app.get("/.well-known/mcp-server-card.json", (_req, res) => {
+  app.get("/.well-known/mcp/server-card", (_req, res) => {
     res.json(serverCard);
   });
 

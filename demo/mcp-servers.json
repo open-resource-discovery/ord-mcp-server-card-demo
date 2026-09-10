@@ -1,0 +1,8 @@
+{
+  "servers": [
+    "http://thruster.local:3000",
+    "http://navigation.local:3000",
+    "http://life-support.local:3000",
+    "http://comms.local:3000"
+  ]
+}

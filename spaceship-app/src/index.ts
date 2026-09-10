@@ -3,12 +3,18 @@ import { createThrusterServer } from "./servers/thruster.js";
 import { createNavigationServer } from "./servers/navigation.js";
 import { createLifeSupportServer } from "./servers/lifeSupport.js";
 import { createCommsServer } from "./servers/comms.js";
+import { createDamageControlServer } from "./servers/damageControl.js";
+import { createOxygenScrubberServer } from "./servers/oxygenScrubber.js";
+import { createEntertainmentServer } from "./servers/entertainment.js";
 
 const serverFactories: Record<string, (url: string) => ReturnType<typeof createThrusterServer>> = {
   thruster: createThrusterServer,
   navigation: createNavigationServer,
   "life-support": createLifeSupportServer,
   comms: createCommsServer,
+  "damage-control": createDamageControlServer,
+  "oxygen-scrubber": createOxygenScrubberServer,
+  entertainment: createEntertainmentServer,
 };
 
 const factory = serverFactories[config.serverType];

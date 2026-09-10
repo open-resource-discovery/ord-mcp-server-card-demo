@@ -2,9 +2,26 @@ import Anthropic from "@anthropic-ai/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { fetchServerCard, type ServerCard } from "./catalog.js";
-import { config } from "./config.js";
+import { config, loadStage2ServerUrls } from "./config.js";
 
 export type Stage = 1 | 2 | 3 | 4;
+
+export interface ConversationTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+const MITHRA_PERSONA =
+  "You are MITHRA, the onboard AI copilot of a spacecraft, speaking with the ship's mission specialist during an emergency. Be calm, concise, and decisive.";
+
+// Stage 1 has no connection to any ship system.
+const SYSTEM_NO_TOOLS =
+  `${MITHRA_PERSONA} You have NO connection to any ship system and NO tools. You cannot read live telemetry (temperatures, pressures, signal strength, position) and you cannot operate any equipment (thrusters, life support, comms). Do NOT invent sensor readings, numbers, or system states. Do NOT claim to be taking actions, executing commands, or adjusting anything. You can only reason from what the human tells you and give advice: likely causes, what they should check, and what to do manually. Whenever a step would require reading a sensor or operating a system, state plainly that you cannot do it yourself and explain what the human must do.`;
+
+// Stages 2-4 have live tools wired to the ship's systems.
+const SYSTEM_WITH_TOOLS =
+  `${MITHRA_PERSONA} You are connected to the ship's systems through the tools provided. Use them to read real telemetry and to act — do not guess values you can measure, and do not claim to change anything you can do via a tool. Take the actions the situation calls for, then report what you did and what you found. If the situation calls for something you have no tool for, do not name or speculate about missing systems — instead, express that you cannot guarantee the situation is fully resolved and that your current access may be incomplete.`;
+
 
 export interface AgentStep {
   type: "thinking" | "tool_call" | "tool_result" | "answer" | "ord";
@@ -17,6 +34,7 @@ export interface AgentStep {
 export async function runAgent(
   userMessage: string,
   stage: Stage,
+  history: ConversationTurn[] = [],
 ): Promise<{ answer: string; steps: AgentStep[]; toolCount: number; serverCount: number }> {
   const steps: AgentStep[] = [];
   const client = new Anthropic({
@@ -30,8 +48,12 @@ export async function runAgent(
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
+      system: SYSTEM_NO_TOOLS,
       tools: [],
-      messages: [{ role: "user", content: userMessage }],
+      messages: [
+        ...history.map((h) => ({ role: h.role as "user" | "assistant", content: h.content })),
+        { role: "user", content: userMessage },
+      ],
     });
     const answer = response.content.find((b) => b.type === "text")?.text ?? "";
     steps.push({ type: "answer", content: answer });
@@ -46,20 +68,22 @@ export async function runAgent(
   let serverCards: { baseUrl: string; card: ServerCard }[] = [];
 
   if (stage === 2) {
-    // Config-based: server URLs come from env config, not ORD
+    // Config-based: server URLs come from a hand-written file, not ORD
+    const stage2Urls = loadStage2ServerUrls();
     steps.push({
       type: "thinking",
-      content: `Using ${config.spaceshipUrls.length} server URLs from configuration. No ORD document.`,
+      content: `Reading hand-written config (mcp-servers.json): ${stage2Urls.length} server URLs. No ORD document.`,
     });
     const results = await Promise.all(
-      config.spaceshipUrls.map(async (baseUrl) => {
+      stage2Urls.map(async (baseUrl) => {
         const card = await fetchServerCard(baseUrl);
         return card ? { baseUrl, card } : null;
       }),
     );
     serverCards = results.filter((r): r is { baseUrl: string; card: ServerCard } => r !== null);
   } else {
-    // Stages 3 + 4: ORD document reveals server list
+    // Stages 3 + 4: ORD document reveals the server list AND carries each
+    // Server Card inline — one read gets the whole fleet, no per-server fetch.
     steps.push({
       type: "ord",
       content: `Reading ORD document at ${config.serverUrl}/ord/v1/documents/catalog`,
@@ -68,25 +92,20 @@ export async function runAgent(
 
     const ordRes = await fetch(config.ordDocUrl);
     const ordDoc = await ordRes.json() as {
-      apiResources?: Array<{ resourceDefinitions?: Array<{ type: string; url: string }> }>;
+      apiResources?: Array<{ resourceDefinitions?: Array<{ type: string; url: string; card?: ServerCard }> }>;
     };
-    const serverCardUrls = (ordDoc.apiResources ?? [])
+    const cardDefs = (ordDoc.apiResources ?? [])
       .flatMap((api) => api.resourceDefinitions ?? [])
-      .filter((def) => def.type === "mcp-server-card" && def.url)
-      .map((def) => def.url);
+      .filter((def) => def.type === "mcp-server-card");
 
     steps.push({
       type: "thinking",
-      content: `Found ${serverCardUrls.length} MCP servers in ORD. Fetching Server Cards...`,
+      content: `Found ${cardDefs.length} MCP servers in ORD document. Server Cards embedded — no per-server fetch.`,
     });
 
-    const results = await Promise.all(
-      config.spaceshipUrls.map(async (baseUrl) => {
-        const card = await fetchServerCard(baseUrl);
-        return card ? { baseUrl, card } : null;
-      }),
-    );
-    serverCards = results.filter((r): r is { baseUrl: string; card: ServerCard } => r !== null);
+    serverCards = cardDefs
+      .map((def) => (def.card ? { baseUrl: def.url, card: def.card } : null))
+      .filter((r): r is { baseUrl: string; card: ServerCard } => r !== null);
   }
 
   // Step 2: Build tool catalog
@@ -159,13 +178,17 @@ export async function runAgent(
     });
   }
 
-  const messages: Anthropic.Messages.MessageParam[] = [{ role: "user", content: userMessage }];
+  const messages: Anthropic.Messages.MessageParam[] = [
+    ...history.map((h) => ({ role: h.role as "user" | "assistant", content: h.content })),
+    { role: "user", content: userMessage },
+  ];
 
   // ─── Agentic loop — identical for stages 2, 3, 4 ─────────────────────────
   while (true) {
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
+      system: SYSTEM_WITH_TOOLS,
       tools: claudeTools,
       messages,
     });
