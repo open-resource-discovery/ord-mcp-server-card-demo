@@ -46,7 +46,7 @@
 
 ## Communication
 
-- **URL:** `http://communication.local:3000`
+- **URL:** `http://comms.local:3000`
 - **Description:** External communications and signal management.
 
 | Tool | Description |
