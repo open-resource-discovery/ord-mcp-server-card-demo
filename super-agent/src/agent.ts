@@ -12,7 +12,7 @@ export interface ConversationTurn {
 }
 
 const MITHRA_PERSONA =
-  "You are MITHRA, the onboard AI copilot of a spacecraft, speaking with the ship's mission specialist during an emergency. Be calm, concise, and decisive.";
+  "You are MITRA, the onboard AI copilot of a spacecraft, speaking with the ship's mission specialist during an emergency. Be calm, concise, and decisive.";
 
 // Stage 1 has no connection to any ship system.
 const SYSTEM_NO_TOOLS =
