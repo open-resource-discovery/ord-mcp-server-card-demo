@@ -14,6 +14,27 @@ const card: ServerCardConfig = {
       description: "Run full structural scan and return damage report after an impact",
       annotations: { readOnlyHint: true },
       inputSchema: {},
+      outputSchema: {
+        type: "object",
+        properties: {
+          scan_time_utc: { type: "string" },
+          overall_integrity_percent: { type: "number" },
+          status: { type: "string" },
+          breaches: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                section: { type: "string" },
+                severity: { type: "string" },
+                pressure_loss_kpa_per_min: { type: "number" },
+              },
+            },
+          },
+          structural_warnings: { type: "array", items: { type: "string" } },
+          recommendation: { type: "string" },
+        },
+      },
     },
     {
       name: "seal_hull_breach",
@@ -29,6 +50,18 @@ const card: ServerCardConfig = {
         },
         required: ["section"],
       },
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          section: { type: "string" },
+          sealant_deployed: { type: "boolean" },
+          estimated_seal_time_seconds: { type: "number" },
+          pressure_loss_stopped: { type: "boolean" },
+          command_acknowledged: { type: "boolean" },
+          message: { type: "string" },
+        },
+      },
     },
     {
       name: "close_emergency_bulkhead",
@@ -43,6 +76,17 @@ const card: ServerCardConfig = {
           },
         },
         required: ["section"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          section: { type: "string" },
+          bulkhead: { type: "string" },
+          cabin_pressure_stable: { type: "boolean" },
+          command_acknowledged: { type: "boolean" },
+          message: { type: "string" },
+        },
       },
     },
   ],

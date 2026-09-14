@@ -15,6 +15,7 @@ export interface ToolCardDef {
     properties?: Record<string, unknown>;
     required?: string[];
   };
+  outputSchema?: Record<string, unknown>;
 }
 
 export interface ServerCardConfig {
@@ -47,7 +48,7 @@ export function createSpaceshipServer(
     title: card.title,
     version: card.version,
     description: card.description,
-    supportedProtocolVersions: ["2025-03-26"],
+    supportedProtocolVersions: ["2025-11-25", "2025-03-26"],
     remotes: [{ type: "streamable-http", url: `${serverUrl}/mcp` }],
     capabilities: { tools: {} },
     tools: card.tools.map((t) => ({
@@ -60,6 +61,7 @@ export function createSpaceshipServer(
         properties: t.inputSchema.properties ?? {},
         required: t.inputSchema.required ?? [],
       },
+      ...(t.outputSchema ? { outputSchema: t.outputSchema } : {}),
     })),
   };
 

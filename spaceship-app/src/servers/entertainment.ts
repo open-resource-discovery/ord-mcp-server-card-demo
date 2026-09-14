@@ -22,6 +22,15 @@ const card: ServerCardConfig = {
         },
         required: ["genre"],
       },
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          genre: { type: "string" },
+          track: { type: "string" },
+          message: { type: "string" },
+        },
+      },
     },
     {
       name: "stream_movie",
@@ -37,6 +46,15 @@ const card: ServerCardConfig = {
         },
         required: ["title"],
       },
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          title: { type: "string" },
+          resolution: { type: "string" },
+          message: { type: "string" },
+        },
+      },
     },
     {
       name: "set_cabin_lighting",
@@ -51,6 +69,15 @@ const card: ServerCardConfig = {
           },
         },
         required: ["mode"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          mode: { type: "string" },
+          brightness_percent: { type: "number" },
+          message: { type: "string" },
+        },
       },
     },
   ],

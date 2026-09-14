@@ -14,6 +14,16 @@ const card: ServerCardConfig = {
       description: "Check current communication signal strength and active channels",
       annotations: { readOnlyHint: true },
       inputSchema: {},
+      outputSchema: {
+        type: "object",
+        properties: {
+          signal_strength_percent: { type: "number" },
+          active_channels: { type: "array", items: { type: "string" } },
+          latency_ms: { type: "number" },
+          status: { type: "string" },
+          note: { type: "string" },
+        },
+      },
     },
     {
       name: "scan_frequencies",
@@ -28,6 +38,24 @@ const card: ServerCardConfig = {
         },
         required: ["range"],
       },
+      outputSchema: {
+        type: "object",
+        properties: {
+          range_scanned: { type: "string" },
+          active_frequencies: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                freq_mhz: { type: "number" },
+                label: { type: "string" },
+                active: { type: "boolean" },
+              },
+            },
+          },
+          scan_complete: { type: "boolean" },
+        },
+      },
     },
     {
       name: "send_distress_signal",
@@ -35,6 +63,15 @@ const card: ServerCardConfig = {
       description: "Broadcast an emergency distress signal on all available frequencies",
       annotations: { destructiveHint: false },
       inputSchema: {},
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          frequencies_used: { type: "array", items: { type: "string" } },
+          message: { type: "string" },
+          estimated_response_time_hours: { type: "number" },
+        },
+      },
     },
   ],
 };
