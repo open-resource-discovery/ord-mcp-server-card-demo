@@ -327,7 +327,15 @@ export const UI_HTML = `<!DOCTYPE html>
 
     /* ── Present mode ── */
     body.present .step.answer .step-text { font-size: 16px !important; line-height: 1.8 !important; }
+    body.present .step.answer .step-text h1,
+    body.present .step.answer .step-text h2,
+    body.present .step.answer .step-text h3 { font-size: 15px !important; }
     body.present .step-meta    { font-size: 11px !important; }
+    body.present .step-text    { font-size: 14px !important; }
+    body.present .step.tool_call .step-text,
+    body.present .step.tool_result .step-text,
+    body.present .step.ord .step-text { font-size: 13px !important; }
+    body.present .user-message { font-size: 15px !important; }
     body.present .panel-input  { font-size: 15px !important; }
     body.present .empty-caption { font-size: 15px !important; }
     body.present .side-stage-name { font-size: 14px !important; }

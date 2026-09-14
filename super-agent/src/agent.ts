@@ -52,6 +52,7 @@ export async function runAgent(
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
+      temperature: 0,
       system: SYSTEM_NO_TOOLS,
       tools: [],
       messages: [
@@ -225,6 +226,7 @@ export async function runAgent(
     const selectionRes = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 256,
+      temperature: 0,
       system: "You are a tool selector. Given a user message and a list of tools with descriptions, return ONLY a JSON array of the tool names needed. No explanation, no markdown — just the JSON array.",
       messages: [{
         role: "user",
@@ -257,7 +259,7 @@ export async function runAgent(
   }
 
   const failedNote = failedUrls.length > 0
-    ? `\n\n[System note: The following configured servers were unreachable and could not be assessed: ${failedUrls.join(', ')}. Mention this clearly in your response.]`
+    ? `\n\n[System note: The following servers from the hand-written config file could not be reached: ${failedUrls.join(', ')}. The URL in the config may be stale or outdated — this is a known risk of manually maintained configuration files. Mention this clearly in your response, framing it as a possible config issue rather than hardware damage.]`
     : '';
 
   const messages: Anthropic.Messages.MessageParam[] = [
@@ -270,6 +272,7 @@ export async function runAgent(
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
+      temperature: 0,
       system: stage === 2 ? SYSTEM_STAGE2 : SYSTEM_WITH_TOOLS,
       tools: claudeTools,
       messages,
