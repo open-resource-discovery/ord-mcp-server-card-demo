@@ -103,8 +103,9 @@ export async function runAgent(
       });
     }
   } else {
-    // Stages 3 + 4: ORD document reveals the server list AND carries each
-    // Server Card inline — one read gets the whole fleet, no per-server fetch.
+    // Stages 3 + 4: ORD document reveals the server count and metadata.
+    // Server Cards are fetched from the internal URLs the catalog-agent knows,
+    // since public URLs (localhost:3001 etc.) don't resolve inside Docker.
     steps.push({
       type: "ord",
       content: `Reading ORD document at ${config.serverUrl}/ord/v1/documents/catalog`,
@@ -113,20 +114,33 @@ export async function runAgent(
 
     const ordRes = await fetch(config.ordDocUrl);
     const ordDoc = await ordRes.json() as {
-      apiResources?: Array<{ resourceDefinitions?: Array<{ type: string; url: string; card?: ServerCard }> }>;
+      apiResources?: Array<{ resourceDefinitions?: Array<{ type: string; url: string }> }>;
     };
     const cardDefs = (ordDoc.apiResources ?? [])
       .flatMap((api) => api.resourceDefinitions ?? [])
-      .filter((def) => def.type === "mcp-server-card");
+      .filter((def) => def.type === "sap:mcp-server-card:v0");
 
     steps.push({
       type: "thinking",
-      content: `Found ${cardDefs.length} MCP servers in ORD document. Server Cards embedded — no per-server fetch.`,
+      content: `Found ${cardDefs.length} MCP Server Card references in ORD document. Fetching each Server Card...`,
     });
 
-    serverCards = cardDefs
-      .map((def) => (def.card ? { baseUrl: def.url, card: def.card } : null))
-      .filter((r): r is { baseUrl: string; card: ServerCard } => r !== null);
+    // Use internal Docker URLs to fetch Server Cards — the ORD document's public
+    // URLs (localhost:300x) don't resolve from inside the catalog-agent container.
+    const fetchedCards = await Promise.all(
+      config.ordSpaceshipUrls.map(async (internalUrl) => ({
+        card: await fetchServerCard(internalUrl),
+      })),
+    );
+
+    for (const { card } of fetchedCards) {
+      if (card) serverCards.push({ baseUrl: card.remotes[0]?.url ?? "", card });
+    }
+
+    steps.push({
+      type: "thinking",
+      content: `Fetched ${serverCards.length} Server Cards. ${stage === 4 ? "Tool metadata available from cards — no live MCP connections needed yet." : "Connecting to each server for tools/list..."}`,
+    });
   }
 
   // Step 2: Build tool catalog
