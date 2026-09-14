@@ -14,6 +14,19 @@ const card: ServerCardConfig = {
       description: "Check backup CO2 scrubbing capacity, filter saturation, and reserve oxygen levels",
       annotations: { readOnlyHint: true },
       inputSchema: {},
+      outputSchema: {
+        type: "object",
+        properties: {
+          backup_scrubbers_active: { type: "boolean" },
+          scrubber_units_available: { type: "number" },
+          filter_saturation_percent: { type: "number" },
+          co2_processing_capacity_ppm_per_min: { type: "number" },
+          oxygen_reserve_liters: { type: "number" },
+          reserve_status: { type: "string" },
+          status: { type: "string" },
+          message: { type: "string" },
+        },
+      },
     },
     {
       name: "activate_backup_scrubbers",
@@ -21,6 +34,17 @@ const card: ServerCardConfig = {
       description: "Bring secondary CO2 scrubbing units online to supplement or replace primary system",
       annotations: { idempotentHint: true },
       inputSchema: {},
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          units_online: { type: "number" },
+          combined_capacity_ppm_per_min: { type: "number" },
+          estimated_co2_normalisation_minutes: { type: "number" },
+          command_acknowledged: { type: "boolean" },
+          message: { type: "string" },
+        },
+      },
     },
     {
       name: "tap_oxygen_reserve",
@@ -36,6 +60,17 @@ const card: ServerCardConfig = {
           },
         },
         required: ["liters"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          liters_released: { type: "number" },
+          reserve_remaining_liters: { type: "number" },
+          cabin_o2_boost_percent: { type: "number" },
+          command_acknowledged: { type: "boolean" },
+          message: { type: "string" },
+        },
       },
     },
   ],

@@ -14,6 +14,16 @@ const card: ServerCardConfig = {
       description: "Check current thruster temperature, power level, and efficiency",
       annotations: { readOnlyHint: true },
       inputSchema: {},
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          temperature_celsius: { type: "number" },
+          power_level_percent: { type: "number" },
+          efficiency_percent: { type: "number" },
+          warning: { type: "string" },
+        },
+      },
     },
     {
       name: "adjust_thrust_level",
@@ -31,6 +41,16 @@ const card: ServerCardConfig = {
         },
         required: ["power_level"],
       },
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          new_power_level_percent: { type: "number" },
+          estimated_temperature_celsius: { type: "number" },
+          command_acknowledged: { type: "boolean" },
+          message: { type: "string" },
+        },
+      },
     },
     {
       name: "emergency_shutdown",
@@ -38,6 +58,16 @@ const card: ServerCardConfig = {
       description: "Emergency shutdown of all thruster systems",
       annotations: { destructiveHint: true },
       inputSchema: {},
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          power_level_percent: { type: "number" },
+          temperature_celsius: { type: "number" },
+          command_acknowledged: { type: "boolean" },
+          message: { type: "string" },
+        },
+      },
     },
   ],
 };

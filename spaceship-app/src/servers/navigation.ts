@@ -14,6 +14,23 @@ const card: ServerCardConfig = {
       description: "Get current coordinates, heading, and speed of the spaceship",
       annotations: { readOnlyHint: true },
       inputSchema: {},
+      outputSchema: {
+        type: "object",
+        properties: {
+          coordinates: {
+            type: "object",
+            properties: {
+              x: { type: "number" },
+              y: { type: "number" },
+              z: { type: "number" },
+            },
+          },
+          units: { type: "string" },
+          heading_degrees: { type: "number" },
+          speed_km_s: { type: "number" },
+          current_destination: { type: "string" },
+        },
+      },
     },
     {
       name: "plot_course",
@@ -28,6 +45,17 @@ const card: ServerCardConfig = {
         },
         required: ["destination"],
       },
+      outputSchema: {
+        type: "object",
+        properties: {
+          destination: { type: "string" },
+          distance_km: { type: "number" },
+          optimal_heading_degrees: { type: "number" },
+          estimated_travel_time_hours: { type: "number" },
+          fuel_required_percent: { type: "number" },
+          course_set: { type: "boolean" },
+        },
+      },
     },
     {
       name: "check_eta",
@@ -35,6 +63,16 @@ const card: ServerCardConfig = {
       description: "Get estimated time of arrival at current destination",
       annotations: { readOnlyHint: true },
       inputSchema: {},
+      outputSchema: {
+        type: "object",
+        properties: {
+          destination: { type: "string" },
+          distance_remaining_km: { type: "number" },
+          current_speed_km_s: { type: "number" },
+          eta_hours: { type: "number" },
+          eta_human: { type: "string" },
+        },
+      },
     },
   ],
 };

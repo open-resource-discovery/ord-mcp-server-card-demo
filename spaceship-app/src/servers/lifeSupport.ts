@@ -14,6 +14,17 @@ const card: ServerCardConfig = {
       description: "Get current oxygen, CO2, temperature, and pressure readings",
       annotations: { readOnlyHint: true },
       inputSchema: {},
+      outputSchema: {
+        type: "object",
+        properties: {
+          oxygen_percent: { type: "number" },
+          co2_ppm: { type: "number" },
+          cabin_temperature_celsius: { type: "number" },
+          pressure_kpa: { type: "number" },
+          status: { type: "string" },
+          warning: { type: "string" },
+        },
+      },
     },
     {
       name: "adjust_oxygen_level",
@@ -31,12 +42,32 @@ const card: ServerCardConfig = {
         },
         required: ["percentage"],
       },
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          new_oxygen_percent: { type: "number" },
+          command_acknowledged: { type: "boolean" },
+          message: { type: "string" },
+        },
+      },
     },
     {
       name: "vent_co2",
       title: "Vent CO2",
       description: "Activate CO2 scrubbers and vent excess carbon dioxide",
       inputSchema: {},
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          co2_before_ppm: { type: "number" },
+          co2_estimated_after_ppm: { type: "number" },
+          duration_minutes: { type: "number" },
+          command_acknowledged: { type: "boolean" },
+          message: { type: "string" },
+        },
+      },
     },
   ],
 };
