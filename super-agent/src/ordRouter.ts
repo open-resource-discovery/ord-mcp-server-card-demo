@@ -4,9 +4,8 @@ import { fetchServerCard, type ServerCard } from "./catalog.js";
 export function createOrdRouter(baseUrl: string, spaceshipUrls: string[], publicSpaceshipUrls: string[]): Router {
   const router = Router();
 
-  // Last-known Server Card per server. Refreshed best-effort on each catalog
-  // read; a server that goes offline keeps its cached card, so the ORD document
-  // still describes it (and its tools) without a live connection.
+  // Cache of last-known Server Cards per server, refreshed best-effort on each
+  // catalog read. Used only for title/description in the ORD document itself.
   const cardCache = new Map<string, ServerCard>();
 
   function slugFromUrl(url: string): string {
@@ -45,29 +44,29 @@ export function createOrdRouter(baseUrl: string, spaceshipUrls: string[], public
         ? cachedCard.name.split("/").pop()!
         : slugFromUrl(internalUrl);
       const serverTitle = cachedCard?.title ?? serverSlug;
+      const serverDescription = cachedCard?.description ?? `MCP server for ${serverTitle}`;
+      const serverDescriptionLong = `Accessible via the MCP streamable HTTP transport. Tool names, descriptions, and input schemas are published statically in the MCP Server Card at /.well-known/mcp/server-card and embedded in the ORD catalog document.`;
 
       return {
-        ordId: `spaceship.demo:apiResource:${serverSlug}:v1`,
+        ordId: `spaceship:apiResource:${serverSlug}:v1`,
         title: serverTitle,
-        shortDescription: `MCP server for ${serverTitle}`,
+        shortDescription: serverDescription,
+        description: serverDescriptionLong,
         version: "1.0.0",
         visibility: "public",
         releaseStatus: "active",
-        partOfPackage: "spaceship.demo:package:spaceship:v1",
-        partOfConsumptionBundles: [{ ordId: "spaceship.demo:consumptionBundle:open:v1" }],
+        partOfPackage: "spaceship:package:spaceship:v1",
+        partOfConsumptionBundles: [{ ordId: "spaceship:consumptionBundle:open:v1" }],
         apiProtocol: "mcp",
         direction: "inbound",
         extensible: { supported: "no" },
         entryPoints: [publicUrl],
         resourceDefinitions: [
           {
-            type: "mcp-server-card",
+            type: "sap:mcp-server-card:v0",
             mediaType: "application/json",
             url: `${publicUrl}/.well-known/mcp/server-card`,
             accessStrategies: [{ type: "open" }],
-            // Server Card embedded inline: consumers get the full card (identity,
-            // remotes, tools) from this one document without fetching each server.
-            ...(cachedCard ? { card: cachedCard } : {}),
           },
         ],
         lastUpdate: "2026-08-26T00:00:00Z",
@@ -77,26 +76,27 @@ export function createOrdRouter(baseUrl: string, spaceshipUrls: string[], public
     res.json({
       $schema: "https://open-resource-discovery.org/spec-v1/interfaces/Document.schema.json",
       openResourceDiscovery: "1.14",
-      policyLevels: ["sap:core:v1"],
       describedSystemInstance: { baseUrl },
       packages: [
         {
-          ordId: "spaceship.demo:package:spaceship:v1",
+          ordId: "spaceship:package:spaceship:v1",
           title: "Spaceship MCP Servers",
-          shortDescription: "MCP servers for spaceship systems",
+          shortDescription: "MCP servers for all spacecraft systems in the demo",
+          description: "A collection of MCP servers representing spacecraft subsystems used in the ORD and MCP Server Card discovery demo. Each server exposes tools for a specific system — thrusters, navigation, life support, communications, damage control, oxygen scrubbing, and entertainment.",
           version: "1.0.0",
-          vendor: "spaceship.demo:vendor:SpaceshipDemo:",
+          vendor: "customer:vendor:Customer:",
         },
       ],
       consumptionBundles: [
         {
-          ordId: "spaceship.demo:consumptionBundle:open:v1",
+          ordId: "spaceship:consumptionBundle:open:v1",
           title: "Open Access",
+          shortDescription: "Openly accessible spacecraft MCP servers — no authentication required",
           version: "1.0.0",
           lastUpdate: "2026-08-26T00:00:00Z",
         },
       ],
-      vendors: [{ ordId: "spaceship.demo:vendor:SpaceshipDemo:", title: "Spaceship Demo" }],
+      vendors: [{ ordId: "customer:vendor:Customer:", title: "Spaceship Demo" }],
       apiResources,
     });
   });
