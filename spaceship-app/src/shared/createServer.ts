@@ -37,7 +37,7 @@ export function createSpaceshipServer(
   app.use((_req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type, mcp-session-id");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, MCP-Session-Id, MCP-Protocol-Version, Last-Event-Id");
     if (_req.method === "OPTIONS") { res.sendStatus(200); return; }
     next();
   });
