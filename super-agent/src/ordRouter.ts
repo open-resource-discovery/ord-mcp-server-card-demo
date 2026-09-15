@@ -60,7 +60,7 @@ export function createOrdRouter(baseUrl: string, spaceshipUrls: string[], public
         apiProtocol: "mcp",
         direction: "inbound",
         extensible: { supported: "no" },
-        entryPoints: [`${publicUrl}/mcp`],
+        entryPoints: [`${internalUrl}/mcp`],
         resourceDefinitions: [
           {
             type: "sap:mcp-server-card:v0",
