@@ -109,8 +109,8 @@ export async function runAgent(
     // since public URLs (localhost:3001 etc.) don't resolve inside Docker.
     steps.push({
       type: "ord",
-      content: `Reading ORD document at ${config.serverUrl}/ord/v1/documents/catalog`,
-      url: `${config.serverUrl}/ord/v1/documents/catalog`,
+      content: `Discovering servers via ORD at ${config.serverUrl}/.well-known/open-resource-discovery`,
+      url: `${config.serverUrl}/.well-known/open-resource-discovery`,
     });
 
     const ordRes = await fetch(config.ordDocUrl);
