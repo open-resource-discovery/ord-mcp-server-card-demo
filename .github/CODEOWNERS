@@ -1,2 +1,5 @@
 # Review owners for CI and build configuration.
 /.github/ @vyshnavigadamsetti @swennemers
+/super-agent/package*.json @vyshnavigadamsetti @swennemers
+/spaceship-app/package*.json @vyshnavigadamsetti @swennemers
+/**/Dockerfile @vyshnavigadamsetti @swennemers
