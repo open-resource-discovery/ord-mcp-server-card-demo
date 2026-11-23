@@ -1,11 +1,11 @@
-FROM node:22-slim AS builder
+FROM node:26.13.1-slim AS builder
 WORKDIR /app
 COPY spaceship-app/package.json spaceship-app/package-lock.json spaceship-app/tsconfig.json ./
 RUN npm ci
 COPY spaceship-app/src/ src/
 RUN rm -f src/*.test.ts && npm run build
 
-FROM node:22-slim
+FROM node:26.13.1-slim
 
 LABEL org.opencontainers.image.source=https://github.com/open-resource-discovery/ord-mcp-server-card-demo
 LABEL org.opencontainers.image.description="MCP Server Card Demo - Spaceship MCP Server"

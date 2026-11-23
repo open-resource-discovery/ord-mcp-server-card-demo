@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import express from "express";
 import { config } from "./config.js";
 import { fetchAllServerCards } from "./catalog.js";
@@ -14,15 +15,26 @@ app.use((_req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type");
-  if (_req.method === "OPTIONS") { res.sendStatus(200); return; }
+  if (_req.method === "OPTIONS") {
+    res.sendStatus(200);
+    return;
+  }
   next();
 });
 
 // ORD endpoints — playground discovers all 6 spaceship servers from here
-app.use(createOrdRouter(config.serverUrl, config.ordSpaceshipUrls, config.publicOrdSpaceshipUrls));
+app.use(
+  createOrdRouter(
+    config.serverUrl,
+    config.ordSpaceshipUrls,
+    config.publicOrdSpaceshipUrls,
+  ),
+);
 
 // Demo UI — served inline from compiled source
-app.get("/", (_req, res) => res.setHeader("Content-Type", "text/html").send(UI_HTML));
+app.get("/", (_req, res) =>
+  res.setHeader("Content-Type", "text/html").send(UI_HTML),
+);
 
 // Catalog — returns all Server Cards
 app.get("/api/catalog", async (_req, res) => {
@@ -41,7 +53,15 @@ app.get("/api/catalog", async (_req, res) => {
 });
 
 app.post("/api/chat", async (req, res) => {
-  const { message, stage = 3, history = [] } = req.body as { message: string; stage?: Stage; history?: ConversationTurn[] };
+  const {
+    message,
+    stage = 3,
+    history = [],
+  } = req.body as {
+    message: string;
+    stage?: Stage;
+    history?: ConversationTurn[];
+  };
 
   if (!message) {
     res.status(400).json({ error: "message is required" });
@@ -59,14 +79,21 @@ app.post("/api/chat", async (req, res) => {
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
-app.listen(config.port, () => {
-  console.log(`\nCatalog Agent running on port ${config.port}`);
-  console.log(`  ORD:     ${config.serverUrl}/.well-known/open-resource-discovery`);
-  console.log(`  Catalog: ${config.serverUrl}/api/catalog`);
-  console.log(`  Chat:    POST ${config.serverUrl}/api/chat`);
-  console.log(`  Health:  ${config.serverUrl}/health`);
-  console.log(`\nWatching spaceship servers:`);
-  config.spaceshipUrls.forEach((url) => console.log(`  ${url}`));
-});
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  app.listen(config.port, () => {
+    console.log(`\nCatalog Agent running on port ${config.port}`);
+    console.log(
+      `  ORD:     ${config.serverUrl}/.well-known/open-resource-discovery`,
+    );
+    console.log(`  Catalog: ${config.serverUrl}/api/catalog`);
+    console.log(`  Chat:    POST ${config.serverUrl}/api/chat`);
+    console.log(`  Health:  ${config.serverUrl}/health`);
+    console.log(`\nWatching spaceship servers:`);
+    config.spaceshipUrls.forEach((url) => console.log(`  ${url}`));
+  });
+}
 
 export { app };

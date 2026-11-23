@@ -1,17 +1,16 @@
-import { describe, it, snapshot } from "node:test";
+import { describe, it, snapshot, before, after } from "node:test";
 import assert from "node:assert";
+import type { Server } from "node:http";
 import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import express from "express";
+import { createOrdRouter } from "./ordRouter.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-
-// Store snapshots in src/ (not dist/) so they can be committed
-snapshot.setResolveSnapshotPath((testPath: string | undefined) => {
-  return (testPath ?? "").replace(/dist[/\\]/, "src/") + ".snapshot";
-});
+snapshot.setResolveSnapshotPath(
+  (testPath: string | undefined) =>
+    (testPath ?? "").replace(/dist[/\\]/, "src/") + ".snapshot",
+);
 
 const documentSchema = JSON.parse(
   readFileSync(
@@ -19,94 +18,84 @@ const documentSchema = JSON.parse(
     "utf-8",
   ),
 );
-
 const configSchema = JSON.parse(
   readFileSync(
     require.resolve("@open-resource-discovery/specification/dist/generated/spec/v1/schemas/Configuration.schema.json"),
     "utf-8",
   ),
 );
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const Ajv = require("ajv").default;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const addFormats = require("ajv-formats");
 
-function formatErrors(
-  errors: Array<{ instancePath?: string; message?: string }>,
-): string {
-  return errors
-    .map((e) => `  ${e.instancePath || "/"}: ${e.message}`)
-    .join("\n");
+let server: Server;
+let baseUrl: string;
+let document: Record<string, any>;
+
+before(async () => {
+  const app = express();
+  app.use(
+    createOrdRouter(
+      "https://catalog.example",
+      ["http://127.0.0.1:19999"],
+      ["https://spaceship.example"],
+    ),
+  );
+  await new Promise<void>((resolve, reject) => {
+    server = app.listen(0, "127.0.0.1", (error?: Error) =>
+      error ? reject(error) : resolve(),
+    );
+  });
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  baseUrl = `http://127.0.0.1:${address.port}`;
+  document = (await (
+    await fetch(`${baseUrl}/ord/v1/documents/catalog`)
+  ).json()) as Record<string, any>;
+});
+after(
+  () =>
+    new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    ),
+);
+
+function validate(schema: object, data: unknown): void {
+  const ajv = new Ajv({ allErrors: true, strict: false });
+  addFormats(ajv);
+  const check = ajv.compile(schema);
+  assert.ok(check(data), JSON.stringify(check.errors, null, 2));
 }
 
-describe("Super Agent ORD Schema Validation", () => {
-  const docPath = join(
-    __dirname,
-    "..",
-    "ord-data",
-    "documents",
-    "document.json",
-  );
-
-  it("ORD document validates against official Document.schema.json", () => {
-    const ajv = new Ajv({ allErrors: true, strict: false });
-    addFormats(ajv);
-    const validate = ajv.compile(documentSchema);
-    const doc = JSON.parse(readFileSync(docPath, "utf-8"));
-    const valid = validate(doc);
-    if (!valid) {
-      assert.fail(
-        `ORD document schema validation failed:\n${formatErrors(validate.errors!)}`,
-      );
-    }
+describe("Catalog Agent ORD Schema Validation", () => {
+  it("published ORD document validates against official Document.schema.json", () => {
+    validate(documentSchema, document);
   });
-
-  it("ORD document matches snapshot", (t) => {
-    const doc = JSON.parse(readFileSync(docPath, "utf-8"));
-    t.assert.snapshot(doc);
+  it("published ORD document matches snapshot", (t) => {
+    t.assert.snapshot(document);
   });
-
-  it("ORD document describes the SpaceshipCommander agent", () => {
-    const doc = JSON.parse(readFileSync(docPath, "utf-8"));
-    const agents = doc.agents ?? [];
-    const commander = agents.find(
-      (a: { ordId: string }) => a.ordId === "neonephos:agent:SpaceshipCommander:v1",
+  it("describes the configured spaceship MCP server", () => {
+    assert.strictEqual(document.apiResources.length, 1);
+    assert.strictEqual(document.apiResources[0].apiProtocol, "mcp");
+    assert.deepStrictEqual(document.apiResources[0].entryPoints, [
+      "https://spaceship.example/mcp",
+    ]);
+  });
+  it("provides a public MCP Server Card definition", () => {
+    const definition = document.apiResources[0].resourceDefinitions[0];
+    assert.strictEqual(definition.mediaType, "application/json");
+    assert.strictEqual(
+      definition.url,
+      "https://spaceship.example/.well-known/mcp/server-card",
     );
-    assert.ok(commander, "SpaceshipCommander agent not found in ORD document");
-    assert.strictEqual(commander.title, "My Spaceship Commander");
   });
-
-  it("ORD document has A2A apiResource for the commander", () => {
-    const doc = JSON.parse(readFileSync(docPath, "utf-8"));
-    const api = doc.apiResources?.find(
-      (r: { ordId: string }) => r.ordId === "neonephos:apiResource:SpaceshipCommander:v1",
+  it("published configuration validates against Configuration.schema.json", async () => {
+    const config = await (
+      await fetch(`${baseUrl}/.well-known/open-resource-discovery`)
+    ).json();
+    validate(configSchema, config);
+    assert.strictEqual(
+      config.openResourceDiscoveryV1.documents[0].url,
+      "/ord/v1/documents/catalog",
     );
-    assert.ok(api, "SpaceshipCommander apiResource not found");
-    assert.strictEqual(api.apiProtocol, "a2a");
-  });
-
-  it("ORD configuration response validates against Configuration.schema.json", () => {
-    const ajv = new Ajv({ allErrors: true, strict: false });
-    addFormats(ajv);
-    const validate = ajv.compile(configSchema);
-    const config = {
-      $schema:
-        "https://open-resource-discovery.org/spec-v1/interfaces/Configuration.schema.json",
-      openResourceDiscoveryV1: {
-        documents: [
-          {
-            url: "/ord/v1/documents/document",
-            accessStrategies: [{ type: "open" }],
-          },
-        ],
-      },
-    };
-    const valid = validate(config);
-    if (!valid) {
-      assert.fail(
-        `ORD configuration schema validation failed:\n${formatErrors(validate.errors!)}`,
-      );
-    }
   });
 });
