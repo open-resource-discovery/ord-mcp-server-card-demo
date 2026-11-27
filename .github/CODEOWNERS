@@ -1,0 +1,9 @@
+# Review owners for CI and build configuration.
+/.github/ @vyshnavigadamsetti @swennemers
+/super-agent/package*.json @vyshnavigadamsetti @swennemers
+/spaceship-app/package*.json @vyshnavigadamsetti @swennemers
+/**/Dockerfile @vyshnavigadamsetti @swennemers
+
+# Review the installer policy with the corresponding package owners.
+/spaceship-app/.npmrc @vyshnavigadamsetti @swennemers
+/super-agent/.npmrc @vyshnavigadamsetti @swennemers
