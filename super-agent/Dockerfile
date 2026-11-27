@@ -1,6 +1,6 @@
 FROM node:26.13.1-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS builder
 WORKDIR /app
-COPY super-agent/package.json super-agent/package-lock.json super-agent/tsconfig.json .npmrc ./
+COPY super-agent/package.json super-agent/package-lock.json super-agent/tsconfig.json super-agent/.npmrc ./
 RUN npm install --global --ignore-scripts npm@11.20.0 && npm ci --ignore-scripts
 COPY super-agent/src/ src/
 RUN rm -f src/*.test.ts && npm run build
@@ -15,7 +15,6 @@ WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
-COPY super-agent/public/ ./public/
 COPY super-agent/src/assets/ ./public/assets/
 
 ENV NODE_ENV=production
